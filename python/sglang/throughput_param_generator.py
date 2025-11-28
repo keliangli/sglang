@@ -138,19 +138,14 @@ class ThroughputParamGenerator:
         
         # Additional logical conflict rules
         
-        # Rule 1: If cuda_graph is disabled, cuda_graph_max_bs should not be set
-        if combination.get("disable_cuda_graph") is True:
-            if combination.get("cuda_graph_max_bs") is not None:
-                return False
-        
-        # Rule 2: Ensure chunked_prefill_size <= max_prefill_tokens if both are set
+        # Rule 1: Ensure chunked_prefill_size <= max_prefill_tokens if both are set
         chunked_prefill = combination.get("chunked_prefill_size")
         max_prefill = combination.get("max_prefill_tokens")
         if chunked_prefill is not None and max_prefill is not None:
             if chunked_prefill > max_prefill:
                 return False
         
-        # Rule 3: Ensure max_running_requests * typical_tokens_per_request <= max_total_tokens
+        # Rule 2: Ensure max_running_requests * typical_tokens_per_request <= max_total_tokens
         # (conservative check: assume at least 512 tokens per request)
         max_running = combination.get("max_running_requests")
         max_total = combination.get("max_total_tokens")
@@ -255,6 +250,10 @@ class ThroughputParamGenerator:
         import csv
         
         if not combinations:
+            return
+        
+        # Check if first combination is not empty
+        if not combinations[0]:
             return
         
         # Get all keys from the first combination

@@ -25,6 +25,9 @@ spec.loader.exec_module(generator_module)
 ThroughputParamGenerator = generator_module.ThroughputParamGenerator
 ParameterDefinition = generator_module.ParameterDefinition
 
+# Benchmark configuration
+BENCHMARK_MODULE = "sglang.bench_offline_throughput"
+
 
 def generate_benchmark_configs(output_file: str, max_configs: int = 10):
     """
@@ -72,7 +75,7 @@ def build_benchmark_command(config: dict, model_path: str, base_args: dict = Non
         Command as a list of strings
     """
     cmd = [
-        "python", "-m", "sglang.bench_offline_throughput",
+        "python", "-m", BENCHMARK_MODULE,
         "--model-path", model_path,
     ]
     
