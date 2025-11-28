@@ -128,14 +128,12 @@ class ThroughputParamGenerator:
             ParameterDefinition(
                 name="nsa_prefill_backend",
                 values=["flashmla_sparse", "flashmla_kv", "flashmla_auto", "fa3", "tilelang"],
-                description="NSA prefill backend",
-                conflicts_with={("attention_backend", "nsa")}  # Only used when attention_backend is nsa
+                description="NSA prefill backend (only used when attention_backend is nsa)"
             ),
             ParameterDefinition(
                 name="nsa_decode_backend",
                 values=["fa3", "flashmla_kv", "flashmla_sparse"],
-                description="NSA decode backend",
-                conflicts_with={("attention_backend", "nsa")}  # Only used when attention_backend is nsa
+                description="NSA decode backend (only used when attention_backend is nsa)"
             ),
             
             # Hierarchical Cache Parameters
@@ -283,19 +281,36 @@ class ThroughputParamGenerator:
             if chunked_prefill > max_prefill:
                 return False
         
-        # Rule 2: Hierarchical cache parameters only make sense when enable_hierarchical_cache is True
+        # Rule 2: Skip combinations where hierarchical cache parameters vary but hicache is disabled
+        # This reduces the search space by keeping default values when the feature is disabled
         enable_hicache = combination.get("enable_hierarchical_cache", False)
         if not enable_hicache:
-            # Skip combinations with non-default hicache settings when hicache is disabled
-            # We allow the default values to pass through for simplicity
-            pass
+            # When hicache is disabled, only accept default-like combinations
+            # This significantly reduces meaningless parameter combinations
+            hicache_ratio = combination.get("hicache_ratio", 1.0)
+            hicache_size = combination.get("hicache_size", 0)
+            hicache_write_policy = combination.get("hicache_write_policy", "write_back")
+            hicache_io_backend = combination.get("hicache_io_backend", "kernel")
+            hicache_mem_layout = combination.get("hicache_mem_layout", "layer_first")
+            hicache_storage_backend = combination.get("hicache_storage_backend", None)
+            hicache_storage_prefetch_policy = combination.get("hicache_storage_prefetch_policy", "best_effort")
+            
+            # Allow only default-like values when hicache is disabled to reduce search space
+            if (hicache_ratio != 1.0 or hicache_size != 0 or 
+                hicache_write_policy != "write_back" or hicache_io_backend != "kernel" or
+                hicache_mem_layout != "layer_first" or hicache_storage_backend is not None or
+                hicache_storage_prefetch_policy != "best_effort"):
+                return False
         
-        # Rule 3: NSA backends only matter when attention_backend is "nsa"
+        # Rule 3: Skip NSA backend variations when attention_backend is not "nsa"
+        # NSA backends are only used when attention_backend is "nsa"
         attention_backend = combination.get("attention_backend")
         if attention_backend != "nsa":
-            # NSA-specific backends are only used when attention_backend is "nsa"
-            # Allow combinations but they won't be used in practice
-            pass
+            nsa_prefill = combination.get("nsa_prefill_backend", "flashmla_sparse")
+            nsa_decode = combination.get("nsa_decode_backend", "fa3")
+            # Allow only default values when not using NSA to reduce search space
+            if nsa_prefill != "flashmla_sparse" or nsa_decode != "fa3":
+                return False
         
         # Rule 4: Overlap features conflict with disable_overlap_schedule
         disable_overlap = combination.get("disable_overlap_schedule", False)
@@ -305,17 +320,21 @@ class ThroughputParamGenerator:
             if combination.get("enable_single_batch_overlap", False):
                 return False
         
-        # Rule 5: torch_compile_max_bs only matters when enable_torch_compile is True
+        # Rule 5: Skip torch_compile_max_bs variations when torch_compile is disabled
         enable_torch_compile = combination.get("enable_torch_compile", False)
         if not enable_torch_compile:
-            # torch_compile_max_bs has no effect when torch_compile is disabled
-            pass
+            torch_compile_max_bs = combination.get("torch_compile_max_bs", 16)
+            # Allow only default value when torch_compile is disabled to reduce search space
+            if torch_compile_max_bs != 16:
+                return False
         
-        # Rule 6: Radix cache eviction policy only matters when radix cache is enabled
+        # Rule 6: Skip radix_eviction_policy variations when radix cache is disabled
         disable_radix = combination.get("disable_radix_cache", False)
         if disable_radix:
-            # radix_eviction_policy has no effect when radix cache is disabled
-            pass
+            radix_policy = combination.get("radix_eviction_policy", "lru")
+            # Allow only default value when radix cache is disabled to reduce search space
+            if radix_policy != "lru":
+                return False
         
         # Rule 7: enable_hierarchical_cache and disable_radix_cache are incompatible
         if enable_hicache and disable_radix:

@@ -66,12 +66,31 @@ The generator now supports all 33 critical performance parameters:
 The generator automatically filters out invalid parameter combinations based on these rules:
 
 1. **Chunked Prefill Constraint**: `chunked_prefill_size` must be ≤ `max_prefill_tokens`
+
 2. **Hierarchical Cache Conflicts**: 
    - Cannot enable both `enable_hierarchical_cache` and `enable_lmcache`
    - Cannot enable both `enable_hierarchical_cache` and `disable_radix_cache`
-3. **Overlap Scheduling**: Cannot enable overlap features when `disable_overlap_schedule` is True
-4. **Memory Layout**: `page_first_direct` layout requires `direct` IO backend
-5. **CUDA Graph Sizing**: Prevents unreasonable large batch sizes with small chunk sizes
+   - When `enable_hierarchical_cache` is False, only default hicache parameter values are included to reduce search space
+
+3. **NSA Backend Filtering**: 
+   - NSA backends are only varied when `attention_backend` is "nsa"
+   - When not using NSA, only default NSA backend values are included to reduce search space
+
+4. **Overlap Scheduling**: Cannot enable overlap features when `disable_overlap_schedule` is True
+
+5. **Memory Layout**: `page_first_direct` layout requires `direct` IO backend
+
+6. **CUDA Graph Sizing**: Prevents unreasonable large batch sizes with small chunk sizes
+
+7. **Torch Compile Filtering**:
+   - `torch_compile_max_bs` is only varied when `enable_torch_compile` is True
+   - Otherwise, only the default value is included to reduce search space
+
+8. **Radix Cache Filtering**:
+   - `radix_eviction_policy` cannot be set when `disable_radix_cache` is True
+   - This prevents setting a policy for a disabled feature
+
+These filtering rules significantly reduce the search space from over 10^18 theoretical combinations to a much smaller set of valid, meaningful configurations.
 
 ## Usage Examples
 
