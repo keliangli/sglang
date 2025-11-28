@@ -75,12 +75,13 @@ class TestThroughputParamGenerator(unittest.TestCase):
         # Check that key parameters exist
         param_names = [p.name for p in self.generator.parameters]
         expected_params = [
-            "max_running_requests",
-            "max_total_tokens",
-            "tp_size",
-            "dp_size",
-            "disable_radix_cache",
-            "disable_cuda_graph",
+            "tokenizer_worker_num",
+            "chunked_prefill_size",
+            "max_prefill_tokens",
+            "schedule_policy",
+            "page_size",
+            "swa_full_tokens_ratio",
+            "radix_eviction_policy",
         ]
         for expected in expected_params:
             self.assertIn(expected, param_names)
@@ -130,16 +131,6 @@ class TestThroughputParamGenerator(unittest.TestCase):
                 # This means no combinations with param1=True should remain
                 self.fail(f"Found invalid combination: {combo}")
 
-    def test_cuda_graph_conflict(self):
-        """Test CUDA graph parameter conflict filtering."""
-        combinations = self.generator.generate_combinations(filter_conflicts=True)
-        
-        # When disable_cuda_graph is True, cuda_graph_max_bs should be None
-        for combo in combinations:
-            if combo.get("disable_cuda_graph") is True:
-                self.assertIsNone(combo.get("cuda_graph_max_bs"),
-                                f"Invalid combination: {combo}")
-
     def test_chunked_prefill_constraint(self):
         """Test chunked_prefill_size <= max_prefill_tokens constraint."""
         combinations = self.generator.generate_combinations(filter_conflicts=True)
@@ -179,11 +170,11 @@ class TestThroughputParamGenerator(unittest.TestCase):
         initial_count = len(self.generator.parameters)
         
         # Remove a parameter that exists
-        self.generator.remove_parameter("tp_size")
+        self.generator.remove_parameter("schedule_policy")
         
         self.assertEqual(len(self.generator.parameters), initial_count - 1)
         param_names = [p.name for p in self.generator.parameters]
-        self.assertNotIn("tp_size", param_names)
+        self.assertNotIn("schedule_policy", param_names)
 
     def test_get_parameter_info(self):
         """Test getting parameter information."""
@@ -277,33 +268,19 @@ class TestThroughputParamGenerator(unittest.TestCase):
         """Test the validation logic for combinations."""
         # Valid combination
         valid_combo = {
-            "disable_cuda_graph": False,
-            "cuda_graph_max_bs": 64,
             "chunked_prefill_size": 512,
             "max_prefill_tokens": 1024,
+            "tokenizer_worker_num": 2,
+            "schedule_policy": "fcfs",
         }
         self.assertTrue(self.generator._is_valid_combination(valid_combo))
         
-        # Invalid: cuda_graph disabled but max_bs set
-        invalid_combo1 = {
-            "disable_cuda_graph": True,
-            "cuda_graph_max_bs": 64,
-        }
-        self.assertFalse(self.generator._is_valid_combination(invalid_combo1))
-        
         # Invalid: chunked_prefill > max_prefill
-        invalid_combo2 = {
+        invalid_combo = {
             "chunked_prefill_size": 2048,
             "max_prefill_tokens": 1024,
         }
-        self.assertFalse(self.generator._is_valid_combination(invalid_combo2))
-        
-        # Invalid: max_running_requests too high for max_total_tokens
-        invalid_combo3 = {
-            "max_running_requests": 1024,
-            "max_total_tokens": 4096,  # 1024 * 512 = 524288 > 4096
-        }
-        self.assertFalse(self.generator._is_valid_combination(invalid_combo3))
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
 
     def test_all_combinations_are_valid(self):
         """Test that all generated combinations pass validation."""

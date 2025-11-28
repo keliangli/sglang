@@ -57,17 +57,14 @@ class ThroughputParamGenerator:
             List of ParameterDefinition objects with key performance parameters.
         """
         parameters = [
+            # Tokenizer Parameters
+            ParameterDefinition(
+                name="tokenizer_worker_num",
+                values=[1, 2, 4, 8],
+                description="The worker num of the tokenizer manager"
+            ),
+            
             # Memory and Scheduling Parameters
-            ParameterDefinition(
-                name="max_running_requests",
-                values=[None, 128, 256, 512, 1024],
-                description="Maximum number of concurrent running requests"
-            ),
-            ParameterDefinition(
-                name="max_total_tokens",
-                values=[None, 4096, 8192, 16384, 32768],
-                description="Maximum total tokens in the system"
-            ),
             ParameterDefinition(
                 name="chunked_prefill_size",
                 values=[None, 512, 1024, 2048, 4096, 8192],
@@ -78,44 +75,27 @@ class ThroughputParamGenerator:
                 values=[4096, 8192, 16384, 32768],
                 description="Maximum tokens in a prefill batch"
             ),
-            
-            # Parallelism Parameters
             ParameterDefinition(
-                name="tp_size",
-                values=[1, 2, 4, 8],
-                description="Tensor parallelism size"
-            ),
-            ParameterDefinition(
-                name="dp_size",
-                values=[1, 2, 4],
-                description="Data parallelism size"
+                name="schedule_policy",
+                values=["fcfs", "lpm", "random", "dfs-weight", "lof"],
+                description="The scheduling policy of the requests"
             ),
             
-            # Cache Parameters
+            # Cache and Memory Parameters
             ParameterDefinition(
-                name="disable_radix_cache",
-                values=[False, True],
-                description="Whether to disable radix cache"
-            ),
-            
-            # CUDA Graph Parameters
-            ParameterDefinition(
-                name="disable_cuda_graph",
-                values=[False, True],
-                description="Whether to disable CUDA graph optimization"
+                name="page_size",
+                values=[None, 16, 32, 64, 128],
+                description="The number of tokens in a page"
             ),
             ParameterDefinition(
-                name="cuda_graph_max_bs",
-                values=[None, 32, 64, 128, 256],
-                description="Maximum batch size for CUDA graph",
-                conflicts_with={("disable_cuda_graph", True)}
+                name="swa_full_tokens_ratio",
+                values=[0.6, 0.7, 0.8, 0.9, 1.0],
+                description="The ratio of SWA layer KV tokens / full layer KV tokens"
             ),
-            
-            # Attention Backend
             ParameterDefinition(
-                name="attention_backend",
-                values=[None, "flashinfer", "triton", "torch_native"],
-                description="Attention computation backend"
+                name="radix_eviction_policy",
+                values=["lru", "lfu"],
+                description="The eviction policy of radix trees (lru: Least Recently Used, lfu: Least Frequently Used)"
             ),
         ]
         
@@ -147,15 +127,6 @@ class ThroughputParamGenerator:
         max_prefill = combination.get("max_prefill_tokens")
         if chunked_prefill is not None and max_prefill is not None:
             if chunked_prefill > max_prefill:
-                return False
-        
-        # Rule 2: Ensure max_running_requests * typical_tokens_per_request <= max_total_tokens
-        # (conservative check: assume MIN_TOKENS_PER_REQUEST tokens per request)
-        max_running = combination.get("max_running_requests")
-        max_total = combination.get("max_total_tokens")
-        if max_running is not None and max_total is not None:
-            min_tokens_needed = max_running * MIN_TOKENS_PER_REQUEST
-            if min_tokens_needed > max_total:
                 return False
         
         return True

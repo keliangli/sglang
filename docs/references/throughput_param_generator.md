@@ -8,7 +8,7 @@ The parameter combination generator helps you systematically test different SGLa
 
 ## Key Features
 
-- **10 Performance-Critical Parameters** covering memory, scheduling, parallelism, caching, and compute backends
+- **7 Performance-Critical Parameters** covering tokenizer, memory, scheduling, and caching
 - **Automatic Conflict Detection** to filter out invalid parameter combinations
 - **Multiple Export Formats** (JSON, CSV) for easy integration with automation tools
 - **Extensible Design** allowing custom parameters and conflict rules
@@ -16,43 +16,31 @@ The parameter combination generator helps you systematically test different SGLa
 
 ## Supported Parameters
 
+### Tokenizer
+- `tokenizer_worker_num`: The worker num of the tokenizer manager
+  - Values: `[1, 2, 4, 8]`
+
 ### Memory and Scheduling
-- `max_running_requests`: Maximum number of concurrent running requests
-  - Values: `[None, 128, 256, 512, 1024]`
-- `max_total_tokens`: Maximum total tokens in the system
-  - Values: `[None, 4096, 8192, 16384, 32768]`
 - `chunked_prefill_size`: Chunked prefill size for better scheduling
   - Values: `[None, 512, 1024, 2048, 4096, 8192]`
 - `max_prefill_tokens`: Maximum tokens in a prefill batch
   - Values: `[4096, 8192, 16384, 32768]`
+- `schedule_policy`: The scheduling policy of the requests
+  - Values: `["fcfs", "lpm", "random", "dfs-weight", "lof"]`
 
-### Parallelism
-- `tp_size`: Tensor parallelism size
-  - Values: `[1, 2, 4, 8]`
-- `dp_size`: Data parallelism size
-  - Values: `[1, 2, 4]`
-
-### Caching
-- `disable_radix_cache`: Whether to disable radix cache
-  - Values: `[False, True]`
-
-### CUDA Graph Optimization
-- `disable_cuda_graph`: Whether to disable CUDA graph optimization
-  - Values: `[False, True]`
-- `cuda_graph_max_bs`: Maximum batch size for CUDA graph
-  - Values: `[None, 32, 64, 128, 256]`
-
-### Attention Backend
-- `attention_backend`: Attention computation backend
-  - Values: `[None, "flashinfer", "triton", "torch_native"]`
+### Cache and Memory
+- `page_size`: The number of tokens in a page
+  - Values: `[None, 16, 32, 64, 128]`
+- `swa_full_tokens_ratio`: The ratio of SWA layer KV tokens / full layer KV tokens
+  - Values: `[0.6, 0.7, 0.8, 0.9, 1.0]`
+- `radix_eviction_policy`: The eviction policy of radix trees (lru: Least Recently Used, lfu: Least Frequently Used)
+  - Values: `["lru", "lfu"]`
 
 ## Conflict Detection Rules
 
 The generator automatically filters out invalid combinations based on these rules:
 
-1. **CUDA Graph Conflict**: If `disable_cuda_graph=True`, then `cuda_graph_max_bs` must be `None`
-2. **Size Constraints**: `chunked_prefill_size` must be ≤ `max_prefill_tokens` when both are set
-3. **Resource Constraints**: `max_running_requests × 512` must be ≤ `max_total_tokens` when both are set
+1. **Size Constraints**: `chunked_prefill_size` must be ≤ `max_prefill_tokens` when both are set
 
 ## Usage
 
@@ -141,16 +129,13 @@ new_combinations = generator.generate_combinations()
 ```json
 [
   {
-    "max_running_requests": 256,
-    "max_total_tokens": 16384,
+    "tokenizer_worker_num": 2,
     "chunked_prefill_size": 2048,
     "max_prefill_tokens": 8192,
-    "tp_size": 2,
-    "dp_size": 1,
-    "disable_radix_cache": false,
-    "disable_cuda_graph": false,
-    "cuda_graph_max_bs": 64,
-    "attention_backend": "flashinfer"
+    "schedule_policy": "fcfs",
+    "page_size": 64,
+    "swa_full_tokens_ratio": 0.8,
+    "radix_eviction_policy": "lru"
   },
   ...
 ]
@@ -159,8 +144,8 @@ new_combinations = generator.generate_combinations()
 ### CSV Format
 
 ```csv
-max_running_requests,max_total_tokens,chunked_prefill_size,max_prefill_tokens,tp_size,dp_size,disable_radix_cache,disable_cuda_graph,cuda_graph_max_bs,attention_backend
-256,16384,2048,8192,2,1,False,False,64,flashinfer
+tokenizer_worker_num,chunked_prefill_size,max_prefill_tokens,schedule_policy,page_size,swa_full_tokens_ratio,radix_eviction_policy
+2,2048,8192,fcfs,64,0.8,lru
 ...
 ```
 
@@ -174,16 +159,20 @@ python -m sglang.throughput_param_generator --output configs.json --max-combinat
 
 # Use with bench_offline_throughput.py
 for config in $(jq -c '.[]' configs.json); do
-    max_running_requests=$(echo $config | jq -r '.max_running_requests')
-    max_total_tokens=$(echo $config | jq -r '.max_total_tokens')
-    tp_size=$(echo $config | jq -r '.tp_size')
+    tokenizer_worker_num=$(echo $config | jq -r '.tokenizer_worker_num')
+    chunked_prefill_size=$(echo $config | jq -r '.chunked_prefill_size')
+    max_prefill_tokens=$(echo $config | jq -r '.max_prefill_tokens')
+    schedule_policy=$(echo $config | jq -r '.schedule_policy')
+    page_size=$(echo $config | jq -r '.page_size')
     
     # Build command with parameters
     python -m sglang.bench_offline_throughput \
         --model-path meta-llama/Meta-Llama-3.1-8B-Instruct \
-        --max-running-requests $max_running_requests \
-        --max-total-tokens $max_total_tokens \
-        --tp-size $tp_size \
+        --tokenizer-worker-num $tokenizer_worker_num \
+        --chunked-prefill-size $chunked_prefill_size \
+        --max-prefill-tokens $max_prefill_tokens \
+        --schedule-policy $schedule_policy \
+        --page-size $page_size \
         --result-filename results.jsonl
 done
 ```
@@ -229,7 +218,7 @@ combinations = custom_gen.generate_combinations()
 
 ## Performance Considerations
 
-The number of theoretical combinations grows exponentially with the number of parameters and their values. The default configuration generates up to 576,000 theoretical combinations, which are filtered down to valid ones.
+The number of theoretical combinations grows exponentially with the number of parameters and their values. The default configuration generates up to 24,000 theoretical combinations, which are filtered down to valid ones.
 
 For large-scale parameter searches, consider:
 - Using `--max-combinations` to limit the search space
