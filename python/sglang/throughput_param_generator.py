@@ -19,6 +19,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 
+# Constants for conflict detection
+MIN_TOKENS_PER_REQUEST = 512  # Conservative estimate for resource constraint checks
+
+
 @dataclass
 class ParameterDefinition:
     """Definition of a parameter with its valid values."""
@@ -146,11 +150,11 @@ class ThroughputParamGenerator:
                 return False
         
         # Rule 2: Ensure max_running_requests * typical_tokens_per_request <= max_total_tokens
-        # (conservative check: assume at least 512 tokens per request)
+        # (conservative check: assume MIN_TOKENS_PER_REQUEST tokens per request)
         max_running = combination.get("max_running_requests")
         max_total = combination.get("max_total_tokens")
         if max_running is not None and max_total is not None:
-            min_tokens_needed = max_running * 512  # Conservative estimate
+            min_tokens_needed = max_running * MIN_TOKENS_PER_REQUEST
             if min_tokens_needed > max_total:
                 return False
         
