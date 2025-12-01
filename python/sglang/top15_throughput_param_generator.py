@@ -11,8 +11,8 @@ These parameters were selected based on their direct impact on:
 5. Parallel processing (tokenizer workers, continuous decode steps)
 
 Usage:
-    python -m sglang.top15_throughput_param_generator --output configs.json
-    python -m sglang.top15_throughput_param_generator --format csv --output configs.csv
+    python -m sglang.top15_throughput_param_generator --output configs.csv
+    python -m sglang.top15_throughput_param_generator --format csv --output configs.csv --device-num 4
 """
 
 import argparse
@@ -67,8 +67,15 @@ class Top15ThroughputParamGenerator:
     18. sampling_backend - Sampling computation backend
     """
     
-    def __init__(self):
-        """Initialize the parameter generator with top 18 parameters."""
+    def __init__(self, device_num: int = 8):
+        """
+        Initialize the parameter generator with top 18 parameters.
+        
+        Args:
+            device_num: Number of GPU devices available (default: 8).
+                       This value constrains the valid combinations of tp_size, pp_size, and dp_size.
+        """
+        self.device_num = device_num
         self.parameters = self._define_top15_parameters()
     
     def _define_top15_parameters(self) -> List[ParameterDefinition]:
@@ -243,9 +250,9 @@ class Top15ThroughputParamGenerator:
         pp_size = combination.get("pp_size", 1)
         dp_size = combination.get("dp_size", 1)
         
-        # The product should not exceed typical GPU cluster sizes (e.g., 64 GPUs)
-        # This is a soft constraint to filter unrealistic configurations
-        if tp_size * pp_size * dp_size > 64:
+        # The product should not exceed the available device_num
+        # This ensures the parallelism configuration is feasible with available GPUs
+        if tp_size * pp_size * dp_size > self.device_num:
             return False
         
         # Rule 2: pp_size > 1 requires compatible configuration
@@ -362,17 +369,6 @@ class Top15ThroughputParamGenerator:
                 "conflicts_with": list(param.conflicts_with) if param.conflicts_with else []
             }
         return info
-    
-    def export_to_json(self, filepath: str, combinations: List[Dict[str, Any]]):
-        """
-        Export combinations to JSON file.
-        
-        Args:
-            filepath: Output file path
-            combinations: List of parameter combinations
-        """
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(combinations, f, indent=2, ensure_ascii=False)
     
     def export_to_csv(self, filepath: str, combinations: List[Dict[str, Any]]):
         """
@@ -624,9 +620,9 @@ def main():
     parser.add_argument(
         "--format",
         type=str,
-        choices=["json", "csv"],
-        default="json",
-        help="Output format (default: json)"
+        choices=["csv"],
+        default="csv",
+        help="Output format (default: csv)"
     )
     parser.add_argument(
         "--max-combinations",
@@ -661,11 +657,17 @@ def main():
         default="config_{index}.json",
         help="Filename pattern for config files (default: config_{index}.json), used with --save-configs"
     )
+    parser.add_argument(
+        "--device-num",
+        type=int,
+        default=8,
+        help="Number of GPU devices available (default: 8). Constrains tp_size * pp_size * dp_size"
+    )
     
     args = parser.parse_args()
     
-    # Create generator
-    generator = Top15ThroughputParamGenerator()
+    # Create generator with device_num constraint
+    generator = Top15ThroughputParamGenerator(device_num=args.device_num)
     
     # Show parameter info if requested
     if args.show_info:
@@ -704,10 +706,7 @@ def main():
     
     # Export or print results
     if args.output:
-        if args.format == "json":
-            generator.export_to_json(args.output, combinations)
-            print(f"Exported {len(combinations)} combinations to {args.output}")
-        elif args.format == "csv":
+        if args.format == "csv":
             generator.export_to_csv(args.output, combinations)
             print(f"Exported {len(combinations)} combinations to {args.output}")
     else:

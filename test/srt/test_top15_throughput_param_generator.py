@@ -33,7 +33,7 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.generator = Top15ThroughputParamGenerator()
+        self.generator = Top15ThroughputParamGenerator(device_num=64)  # Use 64 for backward compatibility with existing tests
 
     def test_parameter_count(self):
         """Test that exactly 18 parameters are present."""
@@ -167,31 +167,6 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
             self.assertIsInstance(param_info["values"], list)
             self.assertIsInstance(param_info["num_values"], int)
             self.assertGreater(param_info["num_values"], 0)
-
-    def test_export_to_json(self):
-        """Test JSON export functionality."""
-        combinations = self.generator.generate_combinations(
-            filter_conflicts=True,
-            max_combinations=5
-        )
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            temp_path = f.name
-        
-        try:
-            self.generator.export_to_json(temp_path, combinations)
-            
-            # Verify file was created and contains valid JSON
-            self.assertTrue(os.path.exists(temp_path))
-            
-            with open(temp_path, 'r') as f:
-                loaded_data = json.load(f)
-            
-            self.assertEqual(len(loaded_data), len(combinations))
-            self.assertEqual(loaded_data, combinations)
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
 
     def test_export_to_csv(self):
         """Test CSV export functionality."""
@@ -396,6 +371,84 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
             "cuda_graph_max_bs": 32,
         }
         self.assertTrue(self.generator._is_valid_combination(valid_combo))
+
+    def test_device_num_initialization(self):
+        """Test that device_num is properly initialized."""
+        # Default device_num should be 8
+        gen_default = Top15ThroughputParamGenerator()
+        self.assertEqual(gen_default.device_num, 8)
+        
+        # Custom device_num should be set
+        gen_custom = Top15ThroughputParamGenerator(device_num=4)
+        self.assertEqual(gen_custom.device_num, 4)
+    
+    def test_device_num_constraint(self):
+        """Test that device_num properly constrains tp*pp*dp product."""
+        # Create generator with device_num=4
+        gen4 = Top15ThroughputParamGenerator(device_num=4)
+        
+        # Valid: 2*2*1 = 4 <= 4
+        valid_combo = {
+            "tp_size": 2,
+            "pp_size": 2,
+            "dp_size": 1,
+        }
+        self.assertTrue(gen4._is_valid_combination(valid_combo))
+        
+        # Invalid: 2*2*2 = 8 > 4
+        invalid_combo = {
+            "tp_size": 2,
+            "pp_size": 2,
+            "dp_size": 2,
+        }
+        self.assertFalse(gen4._is_valid_combination(invalid_combo))
+        
+        # Create generator with device_num=16
+        gen16 = Top15ThroughputParamGenerator(device_num=16)
+        
+        # Valid: 4*4*1 = 16 <= 16
+        valid_combo_16 = {
+            "tp_size": 4,
+            "pp_size": 4,
+            "dp_size": 1,
+        }
+        self.assertTrue(gen16._is_valid_combination(valid_combo_16))
+        
+        # Invalid: 4*4*2 = 32 > 16
+        invalid_combo_16 = {
+            "tp_size": 4,
+            "pp_size": 4,
+            "dp_size": 2,
+        }
+        self.assertFalse(gen16._is_valid_combination(invalid_combo_16))
+    
+    def test_device_num_affects_generation(self):
+        """Test that device_num affects the number of valid combinations."""
+        # Generate combinations with smaller device_num
+        gen_small = Top15ThroughputParamGenerator(device_num=2)
+        combos_small = gen_small.generate_combinations(
+            filter_conflicts=True,
+            max_combinations=1000
+        )
+        
+        # Generate combinations with larger device_num
+        gen_large = Top15ThroughputParamGenerator(device_num=64)
+        combos_large = gen_large.generate_combinations(
+            filter_conflicts=True,
+            max_combinations=1000
+        )
+        
+        # Smaller device_num should produce fewer valid combinations
+        # because more parallelism configurations are filtered out
+        self.assertLessEqual(len(combos_small), len(combos_large))
+        
+        # Verify all combinations in small set respect device_num=2
+        for combo in combos_small:
+            tp = combo.get("tp_size", 1)
+            pp = combo.get("pp_size", 1)
+            dp = combo.get("dp_size", 1)
+            self.assertLessEqual(tp * pp * dp, 2,
+                               f"Combination {combo} violates device_num=2 constraint")
 
 
 if __name__ == "__main__":
