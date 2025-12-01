@@ -1,7 +1,6 @@
 """Tests for the top 15 throughput parameter combination generator."""
 
 import csv
-import json
 import os
 import sys
 import tempfile
