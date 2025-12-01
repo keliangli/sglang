@@ -32,7 +32,7 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.generator = Top15ThroughputParamGenerator(device_num=64)  # Use 64 for backward compatibility with existing tests
+        self.generator = Top15ThroughputParamGenerator()  # Use default device_num=8
 
     def test_parameter_count(self):
         """Test that exactly 18 parameters are present."""
@@ -294,8 +294,8 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
         self.assertEqual(dp_param.values, expected_values)
 
     def test_parallelism_product_constraint(self):
-        """Test that tp_size * pp_size * dp_size <= 64."""
-        # Valid combination: 2 * 2 * 2 = 8
+        """Test that tp_size * pp_size * dp_size <= device_num."""
+        # Valid combination: 2 * 2 * 2 = 8 <= 8 (default device_num)
         valid_combo = {
             "tp_size": 2,
             "pp_size": 2,
@@ -303,23 +303,26 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
         }
         self.assertTrue(self.generator._is_valid_combination(valid_combo))
         
-        # Invalid combination: 8 * 8 * 8 = 512 > 64
+        # Invalid combination: 4 * 4 * 1 = 16 > 8 (default device_num)
         invalid_combo = {
-            "tp_size": 8,
-            "pp_size": 8,
-            "dp_size": 8,
+            "tp_size": 4,
+            "pp_size": 4,
+            "dp_size": 1,
         }
         self.assertFalse(self.generator._is_valid_combination(invalid_combo))
 
     def test_parallelism_with_pipeline_constraint(self):
         """Test that pp_size > 4 with dp_size > 4 is invalid."""
+        # Create generator with larger device_num for this test
+        gen_large = Top15ThroughputParamGenerator(device_num=64)
+        
         # Invalid: both pp_size and dp_size > 4
         invalid_combo = {
             "tp_size": 1,
             "pp_size": 8,
             "dp_size": 8,
         }
-        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        self.assertFalse(gen_large._is_valid_combination(invalid_combo))
         
         # Valid: pp_size > 4 but dp_size <= 4
         valid_combo = {
@@ -327,7 +330,7 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
             "pp_size": 8,
             "dp_size": 2,
         }
-        self.assertTrue(self.generator._is_valid_combination(valid_combo))
+        self.assertTrue(gen_large._is_valid_combination(valid_combo))
 
     def test_dp_size_chunked_prefill_constraint(self):
         """Test chunked_prefill_size constraint with dp_size."""

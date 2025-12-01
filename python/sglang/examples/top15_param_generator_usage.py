@@ -37,7 +37,7 @@ def example_1_basic_generation():
     print(combinations[0])
 
 
-def example_2_export_formats():
+def example_2_export_csv():
     """Example 2: Export configurations to CSV."""
     print("\n" + "="*80)
     print("Example 2: Export configurations to CSV")
@@ -180,7 +180,7 @@ def main():
     
     try:
         example_1_basic_generation()
-        example_2_export_formats()
+        example_2_export_csv()
         example_3_parameter_info()
         example_4_custom_filtering()
         example_5_progressive_optimization()

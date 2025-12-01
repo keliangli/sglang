@@ -615,14 +615,7 @@ def main():
         "--output",
         type=str,
         default=None,
-        help="Output file path (default: print to stdout)"
-    )
-    parser.add_argument(
-        "--format",
-        type=str,
-        choices=["csv"],
-        default="csv",
-        help="Output format (default: csv)"
+        help="Output CSV file path (default: print to stdout)"
     )
     parser.add_argument(
         "--max-combinations",
@@ -706,9 +699,8 @@ def main():
     
     # Export or print results
     if args.output:
-        if args.format == "csv":
-            generator.export_to_csv(args.output, combinations)
-            print(f"Exported {len(combinations)} combinations to {args.output}")
+        generator.export_to_csv(args.output, combinations)
+        print(f"Exported {len(combinations)} combinations to {args.output}")
     else:
         # Print first 5 combinations as examples
         if combinations:
