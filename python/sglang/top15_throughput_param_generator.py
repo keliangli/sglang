@@ -654,6 +654,23 @@ def main():
         action="store_true",
         help="Show parameter information and exit"
     )
+    parser.add_argument(
+        "--save-configs",
+        action="store_true",
+        help="Save parameter combinations as individual config files (instead of single JSON/CSV)"
+    )
+    parser.add_argument(
+        "--config-dir",
+        type=str,
+        default="configs",
+        help="Output directory for config files (default: configs), used with --save-configs"
+    )
+    parser.add_argument(
+        "--config-pattern",
+        type=str,
+        default="config_{index}.json",
+        help="Filename pattern for config files (default: config_{index}.json), used with --save-configs"
+    )
     
     args = parser.parse_args()
     
@@ -666,7 +683,27 @@ def main():
         print(json.dumps(info, indent=2))
         return 0
     
-    # Generate combinations
+    # Handle config file generation mode
+    if args.save_configs:
+        config_gen = ConfigFileGenerator(generator)
+        created_files = config_gen.generate_and_save_configs(
+            output_dir=args.config_dir,
+            filename_pattern=args.config_pattern,
+            filter_conflicts=not args.no_filter,
+            max_combinations=args.max_combinations
+        )
+        print(f"\n{'=' * 80}")
+        print(f"Created {len(created_files)} config files in '{args.config_dir}' directory")
+        print(f"{'=' * 80}")
+        if created_files:
+            print("\nExample config files created:")
+            for filepath in created_files[:3]:
+                print(f"  - {filepath}")
+            if len(created_files) > 3:
+                print(f"  ... and {len(created_files) - 3} more")
+        return 0
+    
+    # Original behavior: Generate combinations
     combinations = generator.generate_combinations(
         filter_conflicts=not args.no_filter,
         max_combinations=args.max_combinations
