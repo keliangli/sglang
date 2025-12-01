@@ -19,6 +19,7 @@ import argparse
 import csv
 import itertools
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -432,6 +433,183 @@ class Top15ThroughputParamGenerator:
         print("=" * 80 + "\n")
 
 
+class ConfigFileGenerator:
+    """
+    Generator for saving parameter combinations as individual config files.
+    
+    This class extends the functionality of Top15ThroughputParamGenerator
+    by allowing parameter combinations to be saved as individual JSON config files
+    with a customizable format that includes additional configuration fields.
+    
+    Example config format:
+    {
+      "context_length": 4096,
+      "trust_remote_code": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "quantization": null,
+      "quantization_param_path": null,
+      "mem_fraction_static": 0.8,
+      "enable_chunked_prefill": null,
+      "max_running_requests": 256,
+      "chunked_prefill_size": 4096,
+      "random_seed": 42,
+      "enable_ep_moe": null,
+      "disable_chunked_prefix_cache": false
+    }
+    """
+    
+    def __init__(self, generator: Optional[Top15ThroughputParamGenerator] = None):
+        """
+        Initialize the config file generator.
+        
+        Args:
+            generator: Optional Top15ThroughputParamGenerator instance. 
+                      If not provided, a new one will be created.
+        """
+        self.generator = generator if generator else Top15ThroughputParamGenerator()
+        self.default_config_template = {
+            "context_length": 4096,
+            "trust_remote_code": True,
+            "dtype": "auto",
+            "kv_cache_dtype": "auto",
+            "quantization": None,
+            "quantization_param_path": None,
+            "mem_fraction_static": 0.8,
+            "enable_chunked_prefill": None,
+            "max_running_requests": 256,
+            "chunked_prefill_size": 4096,
+            "random_seed": 42,
+            "enable_ep_moe": None,
+            "disable_chunked_prefix_cache": False
+        }
+    
+    def _merge_params_with_template(
+        self, 
+        params: Dict[str, Any], 
+        template: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Merge parameter combination with config template.
+        
+        Args:
+            params: Parameter combination from the generator
+            template: Optional custom config template (uses default if not provided)
+            
+        Returns:
+            Merged config dictionary
+        """
+        # Use default template if not provided
+        config_template = template if template else self.default_config_template.copy()
+        
+        # Start with the template
+        config = config_template.copy()
+        
+        # Merge all parameters directly into config
+        # Parameters override template values if they have the same key
+        for param_name, param_value in params.items():
+            config[param_name] = param_value
+        
+        return config
+    
+    def save_config_file(
+        self,
+        params: Dict[str, Any],
+        filepath: str,
+        template: Optional[Dict[str, Any]] = None,
+        indent: int = 2
+    ):
+        """
+        Save a single parameter combination as a JSON config file.
+        
+        Args:
+            params: Parameter combination dictionary
+            filepath: Output file path for the config
+            template: Optional custom config template
+            indent: JSON indentation level (default: 2)
+        """
+        config = self._merge_params_with_template(params, template)
+        
+        # Ensure directory exists
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=indent, ensure_ascii=False)
+    
+    def save_multiple_configs(
+        self,
+        combinations: List[Dict[str, Any]],
+        output_dir: str,
+        filename_pattern: str = "config_{index}.json",
+        template: Optional[Dict[str, Any]] = None,
+        indent: int = 2
+    ) -> List[str]:
+        """
+        Save multiple parameter combinations as individual config files.
+        
+        Args:
+            combinations: List of parameter combinations
+            output_dir: Output directory for config files
+            filename_pattern: Filename pattern with {index} placeholder (default: "config_{index}.json")
+            template: Optional custom config template
+            indent: JSON indentation level (default: 2)
+            
+        Returns:
+            List of created file paths
+        """
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        created_files = []
+        for i, combo in enumerate(combinations):
+            filename = filename_pattern.format(index=i)
+            filepath = os.path.join(output_dir, filename)
+            self.save_config_file(combo, filepath, template, indent)
+            created_files.append(filepath)
+        
+        return created_files
+    
+    def generate_and_save_configs(
+        self,
+        output_dir: str,
+        filename_pattern: str = "config_{index}.json",
+        filter_conflicts: bool = True,
+        max_combinations: Optional[int] = None,
+        template: Optional[Dict[str, Any]] = None,
+        indent: int = 2
+    ) -> List[str]:
+        """
+        Generate parameter combinations and save them as config files.
+        
+        Args:
+            output_dir: Output directory for config files
+            filename_pattern: Filename pattern with {index} placeholder
+            filter_conflicts: If True, filter out conflicting combinations
+            max_combinations: Maximum number of combinations to generate
+            template: Optional custom config template
+            indent: JSON indentation level (default: 2)
+            
+        Returns:
+            List of created file paths
+        """
+        # Generate combinations
+        combinations = self.generator.generate_combinations(
+            filter_conflicts=filter_conflicts,
+            max_combinations=max_combinations
+        )
+        
+        # Save configurations
+        return self.save_multiple_configs(
+            combinations,
+            output_dir,
+            filename_pattern,
+            template,
+            indent
+        )
+
+
 def main():
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
@@ -466,6 +644,23 @@ def main():
         action="store_true",
         help="Show parameter information and exit"
     )
+    parser.add_argument(
+        "--save-configs",
+        action="store_true",
+        help="Save parameter combinations as individual config files (instead of single JSON/CSV)"
+    )
+    parser.add_argument(
+        "--config-dir",
+        type=str,
+        default="configs",
+        help="Output directory for config files (default: configs), used with --save-configs"
+    )
+    parser.add_argument(
+        "--config-pattern",
+        type=str,
+        default="config_{index}.json",
+        help="Filename pattern for config files (default: config_{index}.json), used with --save-configs"
+    )
     
     args = parser.parse_args()
     
@@ -478,7 +673,27 @@ def main():
         print(json.dumps(info, indent=2))
         return 0
     
-    # Generate combinations
+    # Handle config file generation mode
+    if args.save_configs:
+        config_gen = ConfigFileGenerator(generator)
+        created_files = config_gen.generate_and_save_configs(
+            output_dir=args.config_dir,
+            filename_pattern=args.config_pattern,
+            filter_conflicts=not args.no_filter,
+            max_combinations=args.max_combinations
+        )
+        print(f"\n{'=' * 80}")
+        print(f"Created {len(created_files)} config files in '{args.config_dir}' directory")
+        print(f"{'=' * 80}")
+        if created_files:
+            print("\nExample config files created:")
+            for filepath in created_files[:3]:
+                print(f"  - {filepath}")
+            if len(created_files) > 3:
+                print(f"  ... and {len(created_files) - 3} more")
+        return 0
+    
+    # Original behavior: Generate combinations
     combinations = generator.generate_combinations(
         filter_conflicts=not args.no_filter,
         max_combinations=args.max_combinations
