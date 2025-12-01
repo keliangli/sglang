@@ -505,22 +505,10 @@ class ConfigFileGenerator:
         # Start with the template
         config = config_template.copy()
         
-        # Override with parameters from the combination
-        # Map generator parameters to config fields
-        param_mapping = {
-            "chunked_prefill_size": "chunked_prefill_size",
-            "enable_chunked_prefill": "enable_chunked_prefill",
-            "max_running_requests": "max_running_requests",
-        }
-        
-        # Merge parameters
+        # Merge all parameters directly into config
+        # Parameters override template values if they have the same key
         for param_name, param_value in params.items():
-            # Check if parameter has a direct mapping
-            if param_name in param_mapping:
-                config[param_mapping[param_name]] = param_value
-            else:
-                # Add unmapped parameters directly to config
-                config[param_name] = param_value
+            config[param_name] = param_value
         
         return config
     
@@ -543,7 +531,9 @@ class ConfigFileGenerator:
         config = self._merge_params_with_template(params, template)
         
         # Ensure directory exists
-        os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
         
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=indent, ensure_ascii=False)
