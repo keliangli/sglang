@@ -36,18 +36,21 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
         self.generator = Top15ThroughputParamGenerator()
 
     def test_parameter_count(self):
-        """Test that exactly 15 parameters are present."""
-        self.assertEqual(len(self.generator.parameters), 15,
-                        f"Expected 15 parameters, got {len(self.generator.parameters)}")
+        """Test that exactly 18 parameters are present."""
+        self.assertEqual(len(self.generator.parameters), 18,
+                        f"Expected 18 parameters, got {len(self.generator.parameters)}")
 
     def test_top15_parameters_defined(self):
-        """Test that the top 15 most impactful parameters are properly defined."""
+        """Test that the top 18 most impactful parameters are properly defined."""
         param_names = [p.name for p in self.generator.parameters]
         expected_params = [
+            "tp_size",
             "attention_backend",
             "chunked_prefill_size",
             "max_prefill_tokens",
+            "dp_size",
             "schedule_policy",
+            "pp_size",
             "decode_attention_backend",
             "prefill_attention_backend",
             "page_size",
@@ -73,10 +76,10 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
         )
         self.assertLessEqual(len(combinations), 10)
         
-        # Verify each combination has all 15 parameters
+        # Verify each combination has all 18 parameters
         for combo in combinations:
-            self.assertEqual(len(combo), 15,
-                           f"Combination should have 15 parameters, got {len(combo)}")
+            self.assertEqual(len(combo), 18,
+                           f"Combination should have 18 parameters, got {len(combo)}")
 
     def test_generate_combinations_with_filtering(self):
         """Test combination generation with conflict filtering."""
@@ -153,7 +156,7 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
         info = self.generator.get_parameter_info()
         
         self.assertIsInstance(info, dict)
-        self.assertEqual(len(info), 15)
+        self.assertEqual(len(info), 18)
         
         # Check structure of info
         for param_name, param_info in info.items():
@@ -251,10 +254,13 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
         """Test that parameters are in the expected order (by impact)."""
         param_names = [p.name for p in self.generator.parameters]
         expected_order = [
+            "tp_size",
             "attention_backend",
             "chunked_prefill_size",
             "max_prefill_tokens",
+            "dp_size",
             "schedule_policy",
+            "pp_size",
             "decode_attention_backend",
             "prefill_attention_backend",
             "page_size",
@@ -294,6 +300,102 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
         self.assertEqual(len(self.generator.parameters), initial_count - 1)
         param_names = [p.name for p in self.generator.parameters]
         self.assertNotIn("schedule_policy", param_names)
+
+    def test_parallelism_sizes_exist(self):
+        """Test that parallelism size parameters exist."""
+        param_names = [p.name for p in self.generator.parameters]
+        self.assertIn("tp_size", param_names)
+        self.assertIn("pp_size", param_names)
+        self.assertIn("dp_size", param_names)
+
+    def test_parallelism_size_values(self):
+        """Test that parallelism sizes have reasonable values."""
+        tp_param = next(p for p in self.generator.parameters if p.name == "tp_size")
+        pp_param = next(p for p in self.generator.parameters if p.name == "pp_size")
+        dp_param = next(p for p in self.generator.parameters if p.name == "dp_size")
+        
+        expected_values = [1, 2, 4, 8]
+        self.assertEqual(tp_param.values, expected_values)
+        self.assertEqual(pp_param.values, expected_values)
+        self.assertEqual(dp_param.values, expected_values)
+
+    def test_parallelism_product_constraint(self):
+        """Test that tp_size * pp_size * dp_size <= 64."""
+        # Valid combination: 2 * 2 * 2 = 8
+        valid_combo = {
+            "tp_size": 2,
+            "pp_size": 2,
+            "dp_size": 2,
+        }
+        self.assertTrue(self.generator._is_valid_combination(valid_combo))
+        
+        # Invalid combination: 8 * 8 * 8 = 512 > 64
+        invalid_combo = {
+            "tp_size": 8,
+            "pp_size": 8,
+            "dp_size": 8,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+
+    def test_parallelism_with_pipeline_constraint(self):
+        """Test that pp_size > 4 with dp_size > 4 is invalid."""
+        # Invalid: both pp_size and dp_size > 4
+        invalid_combo = {
+            "tp_size": 1,
+            "pp_size": 8,
+            "dp_size": 8,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        
+        # Valid: pp_size > 4 but dp_size <= 4
+        valid_combo = {
+            "tp_size": 1,
+            "pp_size": 8,
+            "dp_size": 2,
+        }
+        self.assertTrue(self.generator._is_valid_combination(valid_combo))
+
+    def test_dp_size_chunked_prefill_constraint(self):
+        """Test chunked_prefill_size constraint with dp_size."""
+        # Invalid: dp_size=4, chunked_prefill=512 -> effective=128 < 256
+        invalid_combo = {
+            "tp_size": 1,
+            "pp_size": 1,
+            "dp_size": 4,
+            "chunked_prefill_size": 512,
+            "max_prefill_tokens": 4096,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        
+        # Valid: dp_size=2, chunked_prefill=2048 -> effective=1024 >= 256
+        valid_combo = {
+            "tp_size": 1,
+            "pp_size": 1,
+            "dp_size": 2,
+            "chunked_prefill_size": 2048,
+            "max_prefill_tokens": 4096,
+        }
+        self.assertTrue(self.generator._is_valid_combination(valid_combo))
+
+    def test_dp_size_cuda_graph_constraint(self):
+        """Test CUDA graph batch size constraint with dp_size."""
+        # Invalid: dp_size=4, cuda_graph_max_bs=96
+        invalid_combo = {
+            "tp_size": 1,
+            "pp_size": 1,
+            "dp_size": 4,
+            "cuda_graph_max_bs": 96,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        
+        # Valid: dp_size=4, cuda_graph_max_bs=32
+        valid_combo = {
+            "tp_size": 1,
+            "pp_size": 1,
+            "dp_size": 4,
+            "cuda_graph_max_bs": 32,
+        }
+        self.assertTrue(self.generator._is_valid_combination(valid_combo))
 
 
 if __name__ == "__main__":

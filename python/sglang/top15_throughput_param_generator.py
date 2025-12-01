@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-SGLang Top 15 Throughput Parameters - Optimization Parameter Combination Generator
+SGLang Top 18 Throughput Parameters - Optimization Parameter Combination Generator
 
-This module focuses on the 15 most impactful parameters for throughput optimization.
+This module focuses on the 18 most impactful parameters for throughput optimization.
 These parameters were selected based on their direct impact on:
-1. Compute performance (attention backends, torch compile)
-2. Memory management (chunked prefill, page size, max prefill tokens)
-3. Scheduling efficiency (schedule policy, overlap features)
-4. Parallel processing (tokenizer workers, continuous decode steps)
+1. Distributed parallelism (tensor, pipeline, data parallelism)
+2. Compute performance (attention backends, torch compile)
+3. Memory management (chunked prefill, page size, max prefill tokens)
+4. Scheduling efficiency (schedule policy, overlap features)
+5. Parallel processing (tokenizer workers, continuous decode steps)
 
 Usage:
     python -m sglang.top15_throughput_param_generator --output configs.json
@@ -39,132 +40,157 @@ class ParameterDefinition:
 
 class Top15ThroughputParamGenerator:
     """
-    Generator for top 15 most impactful throughput optimization parameters.
+    Generator for top 18 most impactful throughput optimization parameters.
     
     This class focuses on the parameters with the highest impact on throughput
     performance, generating all valid combinations while filtering out conflicts.
     
     Selected Parameters (in order of impact):
-    1. attention_backend - Main attention computation backend
-    2. chunked_prefill_size - Prefill chunking for better scheduling
-    3. max_prefill_tokens - Maximum tokens in prefill batch
-    4. schedule_policy - Request scheduling algorithm
-    5. decode_attention_backend - Decode phase attention backend
-    6. prefill_attention_backend - Prefill phase attention backend
-    7. page_size - Memory page size for KV cache
-    8. cuda_graph_max_bs - CUDA graph optimization batch size
-    9. enable_mixed_chunk - Mixed chunking mode
-    10. disable_overlap_schedule - Overlap scheduling control
-    11. enable_torch_compile - Torch compilation optimization
-    12. num_continuous_decode_steps - Continuous decode efficiency
-    13. enable_two_batch_overlap - Two-batch overlap optimization
-    14. tokenizer_worker_num - Tokenizer parallelization
-    15. sampling_backend - Sampling computation backend
+    1. tp_size - Tensor parallelism size (most critical for distributed compute)
+    2. attention_backend - Main attention computation backend
+    3. chunked_prefill_size - Prefill chunking for better scheduling
+    4. max_prefill_tokens - Maximum tokens in prefill batch
+    5. dp_size - Data parallelism size (critical for throughput scaling)
+    6. schedule_policy - Request scheduling algorithm
+    7. pp_size - Pipeline parallelism size (important for large models)
+    8. decode_attention_backend - Decode phase attention backend
+    9. prefill_attention_backend - Prefill phase attention backend
+    10. page_size - Memory page size for KV cache
+    11. cuda_graph_max_bs - CUDA graph optimization batch size
+    12. enable_mixed_chunk - Mixed chunking mode
+    13. disable_overlap_schedule - Overlap scheduling control
+    14. enable_torch_compile - Torch compilation optimization
+    15. num_continuous_decode_steps - Continuous decode efficiency
+    16. enable_two_batch_overlap - Two-batch overlap optimization
+    17. tokenizer_worker_num - Tokenizer parallelization
+    18. sampling_backend - Sampling computation backend
     """
     
     def __init__(self):
-        """Initialize the parameter generator with top 15 parameters."""
+        """Initialize the parameter generator with top 18 parameters."""
         self.parameters = self._define_top15_parameters()
     
     def _define_top15_parameters(self) -> List[ParameterDefinition]:
         """
-        Define the top 15 most impactful performance parameters.
+        Define the top 18 most impactful performance parameters.
         
         These parameters were selected based on their direct impact on:
+        - Distributed parallelism (tensor, pipeline, data parallelism)
         - Compute performance (attention backends, compilation)
         - Memory efficiency (chunking, page size)
         - Scheduling optimization (policies, overlap features)
         - Parallelization (tokenizer workers, continuous decode)
         
         Returns:
-            List of ParameterDefinition objects for top 15 parameters.
+            List of ParameterDefinition objects for top 18 parameters.
         """
         parameters = [
-            # Top 1: Attention Backend - Most critical for compute performance
+            # Top 1: Tensor Parallelism Size - Most critical for distributed compute
+            ParameterDefinition(
+                name="tp_size",
+                values=[1, 2, 4, 8],
+                description="Tensor parallelism size (highest impact on distributed compute performance)"
+            ),
+            
+            # Top 2: Attention Backend - Most critical for compute performance
             ParameterDefinition(
                 name="attention_backend",
                 values=[None, "flashinfer", "triton", "torch_native", "fa3", "fa4"],
                 description="The main attention backend (highest impact on compute performance)"
             ),
             
-            # Top 2: Chunked Prefill Size - Critical for memory and scheduling
+            # Top 3: Chunked Prefill Size - Critical for memory and scheduling
             ParameterDefinition(
                 name="chunked_prefill_size",
                 values=[None, 512, 1024, 2048, 4096, 8192, 16384],
                 description="Chunked prefill size for better scheduling and memory management"
             ),
             
-            # Top 3: Max Prefill Tokens - Directly impacts batch processing
+            # Top 4: Max Prefill Tokens - Directly impacts batch processing
             ParameterDefinition(
                 name="max_prefill_tokens",
                 values=[4096, 8192, 16384, 32768, 65536],
                 description="Maximum tokens in a prefill batch (affects throughput directly)"
             ),
             
-            # Top 4: Schedule Policy - Core scheduling algorithm
+            # Top 5: Data Parallelism Size - Critical for throughput scaling
+            ParameterDefinition(
+                name="dp_size",
+                values=[1, 2, 4, 8],
+                description="Data parallelism size (critical for throughput scaling with multiple instances)"
+            ),
+            
+            # Top 6: Schedule Policy - Core scheduling algorithm
             ParameterDefinition(
                 name="schedule_policy",
                 values=["fcfs", "lpm", "random", "dfs-weight", "lof"],
                 description="The scheduling policy of requests (impacts request ordering)"
             ),
             
-            # Top 5: Decode Attention Backend - Critical for decode phase
+            # Top 7: Pipeline Parallelism Size - Important for large models
+            ParameterDefinition(
+                name="pp_size",
+                values=[1, 2, 4, 8],
+                description="Pipeline parallelism size (important for large model distribution)"
+            ),
+            
+            # Top 8: Decode Attention Backend - Critical for decode phase
             ParameterDefinition(
                 name="decode_attention_backend",
                 values=[None, "flashinfer", "triton", "torch_native", "fa3"],
                 description="Attention backend for decode phase (high impact on decode perf)"
             ),
             
-            # Top 6: Prefill Attention Backend - Critical for prefill phase
+            # Top 9: Prefill Attention Backend - Critical for prefill phase
             ParameterDefinition(
                 name="prefill_attention_backend",
                 values=[None, "flashinfer", "triton", "torch_native", "fa3"],
                 description="Attention backend for prefill phase (high impact on prefill perf)"
             ),
             
-            # Top 7: Page Size - Memory management efficiency
+            # Top 10: Page Size - Memory management efficiency
             ParameterDefinition(
                 name="page_size",
                 values=[None, 16, 32, 64, 128, 256],
                 description="The number of tokens in a page (affects memory efficiency)"
             ),
             
-            # Top 8: CUDA Graph Max Batch Size - CUDA optimization
+            # Top 11: CUDA Graph Max Batch Size - CUDA optimization
             ParameterDefinition(
                 name="cuda_graph_max_bs",
                 values=[None, 8, 16, 24, 32, 48, 64, 80, 96],
                 description="Maximum batch size for CUDA graph capture (reduces overhead)"
             ),
             
-            # Top 9: Enable Mixed Chunk - Scheduling optimization
+            # Top 12: Enable Mixed Chunk - Scheduling optimization
             ParameterDefinition(
                 name="enable_mixed_chunk",
                 values=[False, True],
                 description="Enable mixed chunk mode for better scheduling"
             ),
             
-            # Top 10: Disable Overlap Schedule - Major scheduling feature
+            # Top 13: Disable Overlap Schedule - Major scheduling feature
             ParameterDefinition(
                 name="disable_overlap_schedule",
                 values=[False, True],
                 description="Disable overlap scheduling between prefill and decode"
             ),
             
-            # Top 11: Enable Torch Compile - Compilation optimization
+            # Top 14: Enable Torch Compile - Compilation optimization
             ParameterDefinition(
                 name="enable_torch_compile",
                 values=[False, True],
                 description="Enable torch.compile for model optimization"
             ),
             
-            # Top 12: Continuous Decode Steps - Decode efficiency
+            # Top 15: Continuous Decode Steps - Decode efficiency
             ParameterDefinition(
                 name="num_continuous_decode_steps",
                 values=[1, 2, 4, 8, 16],
                 description="Number of continuous decode steps (affects decode throughput)"
             ),
             
-            # Top 13: Enable Two Batch Overlap - Throughput optimization
+            # Top 16: Enable Two Batch Overlap - Throughput optimization
             ParameterDefinition(
                 name="enable_two_batch_overlap",
                 values=[False, True],
@@ -172,14 +198,14 @@ class Top15ThroughputParamGenerator:
                 conflicts_with={("disable_overlap_schedule", True)}
             ),
             
-            # Top 14: Tokenizer Worker Number - Parallel processing
+            # Top 17: Tokenizer Worker Number - Parallel processing
             ParameterDefinition(
                 name="tokenizer_worker_num",
                 values=[1, 2, 4, 8, 16],
                 description="The worker num of the tokenizer manager (affects tokenization speed)"
             ),
             
-            # Top 15: Sampling Backend - Sampling performance
+            # Top 18: Sampling Backend - Sampling performance
             ParameterDefinition(
                 name="sampling_backend",
                 values=[None, "flashinfer", "pytorch"],
@@ -208,27 +234,58 @@ class Top15ThroughputParamGenerator:
                         if combination[conflict_name] == conflict_value:
                             return False
         
-        # Additional logical conflict rules for top 15 parameters
+        # Additional logical conflict rules for top 18 parameters
         
-        # Rule 1: Ensure chunked_prefill_size <= max_prefill_tokens if both are set
+        # Rule 1: Parallelism size constraints
+        # tp_size, pp_size, and dp_size should have reasonable combinations
+        tp_size = combination.get("tp_size", 1)
+        pp_size = combination.get("pp_size", 1)
+        dp_size = combination.get("dp_size", 1)
+        
+        # The product should not exceed typical GPU cluster sizes (e.g., 64 GPUs)
+        # This is a soft constraint to filter unrealistic configurations
+        if tp_size * pp_size * dp_size > 64:
+            return False
+        
+        # Rule 2: pp_size > 1 requires compatible configuration
+        # Pipeline parallelism with dp_size > 1 can be complex, filter extreme cases
+        if pp_size > 4 and dp_size > 4:
+            return False
+        
+        # Rule 3: Ensure chunked_prefill_size <= max_prefill_tokens if both are set
         chunked_prefill = combination.get("chunked_prefill_size")
         max_prefill = combination.get("max_prefill_tokens")
         if chunked_prefill is not None and max_prefill is not None:
             if chunked_prefill > max_prefill:
                 return False
         
-        # Rule 2: Overlap features conflict with disable_overlap_schedule
+        # Rule 4: Adjust chunked_prefill_size constraint based on dp_size
+        # When dp_size > 1, chunked_prefill_size should be adjusted accordingly
+        if dp_size > 1 and chunked_prefill is not None and max_prefill is not None:
+            # With data parallelism, effective chunked_prefill per instance is reduced
+            effective_chunked_prefill = chunked_prefill // dp_size
+            if effective_chunked_prefill < 256:  # Too small to be efficient
+                return False
+        
+        # Rule 5: Overlap features conflict with disable_overlap_schedule
         disable_overlap = combination.get("disable_overlap_schedule", False)
         if disable_overlap:
             if combination.get("enable_two_batch_overlap", False):
                 return False
         
-        # Rule 3: Reasonable CUDA graph batch size constraints
+        # Rule 6: Reasonable CUDA graph batch size constraints
         cuda_graph_max_bs = combination.get("cuda_graph_max_bs")
         if cuda_graph_max_bs is not None and chunked_prefill is not None:
             # Avoid extremely large cuda_graph_max_bs with small chunked_prefill_size
             # as it would waste memory
             if chunked_prefill <= 2048 and cuda_graph_max_bs > 32:
+                return False
+        
+        # Rule 7: CUDA graph batch size interaction with dp_size
+        # With data parallelism, memory usage increases
+        if cuda_graph_max_bs is not None and dp_size > 1:
+            # Conservative constraint: reduce max cuda_graph_max_bs when dp_size is high
+            if dp_size >= 4 and cuda_graph_max_bs > 64:
                 return False
         
         return True
@@ -347,12 +404,12 @@ class Top15ThroughputParamGenerator:
             combinations: List of parameter combinations
         """
         print("\n" + "=" * 80)
-        print("SGLang Top 15 Throughput Optimization Parameters - Combination Generator")
+        print("SGLang Top 18 Throughput Optimization Parameters - Combination Generator")
         print("=" * 80)
         print(f"\nTotal valid combinations: {len(combinations)}")
         print(f"Number of parameters: {len(self.parameters)}")
         
-        print("\nTop 15 Parameters (ordered by performance impact):")
+        print("\nTop 18 Parameters (ordered by performance impact):")
         for i, param in enumerate(self.parameters, 1):
             print(f"\n{i}. {param.name}:")
             print(f"   Values ({len(param.values)}): {param.values}")
@@ -378,7 +435,7 @@ class Top15ThroughputParamGenerator:
 def main():
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
-        description="Generate parameter combinations for top 15 throughput-impacting parameters"
+        description="Generate parameter combinations for top 18 throughput-impacting parameters"
     )
     parser.add_argument(
         "--output",
