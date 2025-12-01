@@ -38,9 +38,9 @@ def example_1_basic_generation():
 
 
 def example_2_export_formats():
-    """Example 2: Export configurations in different formats."""
+    """Example 2: Export configurations to CSV."""
     print("\n" + "="*80)
-    print("Example 2: Export configurations to JSON and CSV")
+    print("Example 2: Export configurations to CSV")
     print("="*80)
     
     generator = Top15ThroughputParamGenerator()
@@ -50,11 +50,6 @@ def example_2_export_formats():
         filter_conflicts=True,
         max_combinations=500
     )
-    
-    # Export to JSON
-    json_path = "/tmp/top15_configs.json"
-    generator.export_to_json(json_path, combinations)
-    print(f"✓ Exported {len(combinations)} configurations to {json_path}")
     
     # Export to CSV
     csv_path = "/tmp/top15_configs.csv"
@@ -143,6 +138,40 @@ def example_5_progressive_optimization():
     print(f"configurations while focusing on the most impactful parameters.")
 
 
+def example_6_device_num_constraint():
+    """Example 6: Using device_num to constrain parallelism."""
+    print("\n" + "="*80)
+    print("Example 6: Using device_num constraint for different GPU counts")
+    print("="*80)
+    
+    # Test with different device counts
+    for device_num in [2, 4, 8, 16]:
+        generator = Top15ThroughputParamGenerator(device_num=device_num)
+        
+        # Generate combinations
+        combinations = generator.generate_combinations(
+            filter_conflicts=True,
+            max_combinations=10000
+        )
+        
+        # Check max parallelism product
+        max_product = 0
+        for combo in combinations:
+            product = combo.get('tp_size', 1) * combo.get('pp_size', 1) * combo.get('dp_size', 1)
+            max_product = max(max_product, product)
+        
+        print(f"\ndevice_num={device_num}:")
+        print(f"  Generated {len(combinations)} valid combinations")
+        print(f"  Max tp*pp*dp product: {max_product} (constraint: <= {device_num})")
+        
+        # Show example with max parallelism
+        for combo in combinations:
+            product = combo.get('tp_size', 1) * combo.get('pp_size', 1) * combo.get('dp_size', 1)
+            if product == max_product:
+                print(f"  Example config: tp={combo['tp_size']}, pp={combo['pp_size']}, dp={combo['dp_size']}")
+                break
+
+
 def main():
     """Run all examples."""
     print("\n" + "="*80)
@@ -155,6 +184,7 @@ def main():
         example_3_parameter_info()
         example_4_custom_filtering()
         example_5_progressive_optimization()
+        example_6_device_num_constraint()
         
         print("\n" + "="*80)
         print("All examples completed successfully!")
