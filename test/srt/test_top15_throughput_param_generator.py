@@ -1,5 +1,6 @@
 """Tests for the top 15 throughput parameter combination generator."""
 
+import csv
 import json
 import os
 import sys
@@ -191,8 +192,6 @@ class TestTop15ThroughputParamGenerator(unittest.TestCase):
 
     def test_export_to_csv(self):
         """Test CSV export functionality."""
-        import csv
-        
         combinations = self.generator.generate_combinations(
             filter_conflicts=True,
             max_combinations=5

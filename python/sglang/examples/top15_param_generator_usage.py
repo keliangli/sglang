@@ -8,6 +8,7 @@ for throughput optimization experiments.
 
 import sys
 import os
+import traceback
 
 # Add parent directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -161,7 +162,6 @@ def main():
         
     except Exception as e:
         print(f"\nError running examples: {e}")
-        import traceback
         traceback.print_exc()
         return 1
     

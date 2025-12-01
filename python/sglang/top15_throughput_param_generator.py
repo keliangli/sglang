@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import csv
 import itertools
 import json
 import sys
@@ -323,8 +324,6 @@ class Top15ThroughputParamGenerator:
             filepath: Output file path
             combinations: List of parameter combinations
         """
-        import csv
-        
         if not combinations:
             return
         
