@@ -60,19 +60,19 @@ class ThroughputParamGenerator:
             # Tokenizer Parameters
             ParameterDefinition(
                 name="tokenizer_worker_num",
-                values=[1, 2, 4, 8],
+                values=[1, 2, 4, 8, 16],
                 description="The worker num of the tokenizer manager"
             ),
             
             # Memory and Scheduling Parameters
             ParameterDefinition(
                 name="chunked_prefill_size",
-                values=[None, 512, 1024, 2048, 4096, 8192],
+                values=[None, 512, 1024, 2048, 4096, 8192, 16384],
                 description="Chunked prefill size for better scheduling"
             ),
             ParameterDefinition(
                 name="max_prefill_tokens",
-                values=[4096, 8192, 16384, 32768],
+                values=[4096, 8192, 16384, 32768, 65536],
                 description="Maximum tokens in a prefill batch"
             ),
             ParameterDefinition(
@@ -84,18 +84,170 @@ class ThroughputParamGenerator:
             # Cache and Memory Parameters
             ParameterDefinition(
                 name="page_size",
-                values=[None, 16, 32, 64, 128],
+                values=[None, 16, 32, 64, 128, 256],
                 description="The number of tokens in a page"
             ),
             ParameterDefinition(
                 name="swa_full_tokens_ratio",
-                values=[0.6, 0.7, 0.8, 0.9, 1.0],
+                values=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
                 description="The ratio of SWA layer KV tokens / full layer KV tokens"
             ),
             ParameterDefinition(
                 name="radix_eviction_policy",
                 values=["lru", "lfu"],
-                description="The eviction policy of radix trees (lru: Least Recently Used, lfu: Least Frequently Used)"
+                description="The eviction policy of radix trees (lru: Least Recently Used, lfu: Least Frequently Used)",
+                conflicts_with={("disable_radix_cache", True)}
+            ),
+            
+            # Attention Backend Parameters
+            ParameterDefinition(
+                name="attention_backend",
+                values=[None, "flashinfer", "triton", "torch_native", "fa3", "fa4"],
+                description="The main attention backend"
+            ),
+            ParameterDefinition(
+                name="decode_attention_backend",
+                values=[None, "flashinfer", "triton", "torch_native", "fa3"],
+                description="Attention backend for decode phase"
+            ),
+            ParameterDefinition(
+                name="prefill_attention_backend",
+                values=[None, "flashinfer", "triton", "torch_native", "fa3"],
+                description="Attention backend for prefill phase"
+            ),
+            ParameterDefinition(
+                name="sampling_backend",
+                values=[None, "flashinfer", "pytorch"],
+                description="Choose the kernels for sampling layers"
+            ),
+            ParameterDefinition(
+                name="mm_attention_backend",
+                values=[None, "sdpa", "fa3", "triton_attn"],
+                description="Set multimodal attention backend"
+            ),
+            ParameterDefinition(
+                name="nsa_prefill_backend",
+                values=["flashmla_sparse", "flashmla_kv", "flashmla_auto", "fa3", "tilelang"],
+                description="NSA prefill backend (only used when attention_backend is nsa)"
+            ),
+            ParameterDefinition(
+                name="nsa_decode_backend",
+                values=["fa3", "flashmla_kv", "flashmla_sparse"],
+                description="NSA decode backend (only used when attention_backend is nsa)"
+            ),
+            
+            # Hierarchical Cache Parameters
+            ParameterDefinition(
+                name="enable_hierarchical_cache",
+                values=[False, True],
+                description="Enable hierarchical cache for CPU-GPU KV cache transfer",
+                conflicts_with={("enable_lmcache", True)}
+            ),
+            ParameterDefinition(
+                name="hicache_ratio",
+                values=[1.0, 1.5, 2.0, 3.0, 4.0],
+                description="The ratio of the size of host KV cache memory pool to device pool"
+            ),
+            ParameterDefinition(
+                name="hicache_size",
+                values=[0, 8, 16, 32, 64],
+                description="The size of host KV cache memory pool in GB (0 means use hicache_ratio)"
+            ),
+            ParameterDefinition(
+                name="hicache_write_policy",
+                values=["write_back", "write_through", "write_through_selective"],
+                description="The write policy of hierarchical cache"
+            ),
+            ParameterDefinition(
+                name="hicache_io_backend",
+                values=["kernel", "direct"],
+                description="The IO backend for KV cache transfer between CPU and GPU"
+            ),
+            ParameterDefinition(
+                name="hicache_mem_layout",
+                values=["layer_first", "page_first", "page_first_direct", "page_head"],
+                description="The layout of host memory pool for hierarchical cache"
+            ),
+            ParameterDefinition(
+                name="hicache_storage_backend",
+                values=[None, "file", "mooncake"],
+                description="The storage backend for hierarchical KV cache"
+            ),
+            ParameterDefinition(
+                name="hicache_storage_prefetch_policy",
+                values=["best_effort", "wait_complete", "timeout"],
+                description="Control when prefetching from the storage backend should stop"
+            ),
+            
+            # LMCache
+            ParameterDefinition(
+                name="enable_lmcache",
+                values=[False, True],
+                description="Using LMCache as an alternative hierarchical cache solution",
+                conflicts_with={("enable_hierarchical_cache", True)}
+            ),
+            
+            # Radix Cache
+            ParameterDefinition(
+                name="disable_radix_cache",
+                values=[False, True],
+                description="Disable radix cache",
+                conflicts_with={("enable_hierarchical_cache", True)}
+            ),
+            
+            # CUDA Graph Parameters
+            ParameterDefinition(
+                name="cuda_graph_max_bs",
+                values=[None, 8, 16, 24, 32, 48, 64, 80, 96],
+                description="Maximum batch size for CUDA graph capture"
+            ),
+            
+            # Overlap and Optimization Parameters
+            ParameterDefinition(
+                name="disable_overlap_schedule",
+                values=[False, True],
+                description="Disable overlap scheduling between prefill and decode"
+            ),
+            ParameterDefinition(
+                name="enable_mixed_chunk",
+                values=[False, True],
+                description="Enable mixed chunk mode for better scheduling"
+            ),
+            ParameterDefinition(
+                name="enable_two_batch_overlap",
+                values=[False, True],
+                description="Enable two batch overlap for better throughput",
+                conflicts_with={("disable_overlap_schedule", True)}
+            ),
+            ParameterDefinition(
+                name="enable_single_batch_overlap",
+                values=[False, True],
+                description="Enable single batch overlap",
+                conflicts_with={("disable_overlap_schedule", True)}
+            ),
+            
+            # Torch Compile and CUDA Graph
+            ParameterDefinition(
+                name="enable_torch_compile",
+                values=[False, True],
+                description="Enable torch.compile for model optimization"
+            ),
+            ParameterDefinition(
+                name="enable_piecewise_cuda_graph",
+                values=[False, True],
+                description="Enable piecewise CUDA graph for better memory usage"
+            ),
+            ParameterDefinition(
+                name="torch_compile_max_bs",
+                values=[16, 32, 48, 64, 96],
+                description="Maximum batch size for torch compile"
+            ),
+            
+            # Continuous Decode
+            ParameterDefinition(
+                name="num_continuous_decode_steps",
+                values=[1, 2, 4, 8, 16],
+                description="Number of continuous decode steps"
             ),
         ]
         
@@ -127,6 +279,84 @@ class ThroughputParamGenerator:
         max_prefill = combination.get("max_prefill_tokens")
         if chunked_prefill is not None and max_prefill is not None:
             if chunked_prefill > max_prefill:
+                return False
+        
+        # Rule 2: Skip combinations where hierarchical cache parameters vary but hicache is disabled
+        # This reduces the search space by keeping default values when the feature is disabled
+        enable_hicache = combination.get("enable_hierarchical_cache", False)
+        if not enable_hicache:
+            # When hicache is disabled, only accept default-like combinations
+            # This significantly reduces meaningless parameter combinations
+            hicache_ratio = combination.get("hicache_ratio", 1.0)
+            hicache_size = combination.get("hicache_size", 0)
+            hicache_write_policy = combination.get("hicache_write_policy", "write_back")
+            hicache_io_backend = combination.get("hicache_io_backend", "kernel")
+            hicache_mem_layout = combination.get("hicache_mem_layout", "layer_first")
+            hicache_storage_backend = combination.get("hicache_storage_backend", None)
+            hicache_storage_prefetch_policy = combination.get("hicache_storage_prefetch_policy", "best_effort")
+            
+            # Allow only default-like values when hicache is disabled to reduce search space
+            if (hicache_ratio != 1.0 or hicache_size != 0 or 
+                hicache_write_policy != "write_back" or hicache_io_backend != "kernel" or
+                hicache_mem_layout != "layer_first" or hicache_storage_backend is not None or
+                hicache_storage_prefetch_policy != "best_effort"):
+                return False
+        
+        # Rule 3: Skip NSA backend variations when attention_backend is not "nsa"
+        # NSA backends are only used when attention_backend is "nsa"
+        attention_backend = combination.get("attention_backend")
+        if attention_backend != "nsa":
+            nsa_prefill = combination.get("nsa_prefill_backend", "flashmla_sparse")
+            nsa_decode = combination.get("nsa_decode_backend", "fa3")
+            # Allow only default values when not using NSA to reduce search space
+            if nsa_prefill != "flashmla_sparse" or nsa_decode != "fa3":
+                return False
+        
+        # Rule 4: Overlap features conflict with disable_overlap_schedule
+        disable_overlap = combination.get("disable_overlap_schedule", False)
+        if disable_overlap:
+            if combination.get("enable_two_batch_overlap", False):
+                return False
+            if combination.get("enable_single_batch_overlap", False):
+                return False
+        
+        # Rule 5: Skip torch_compile_max_bs variations when torch_compile is disabled
+        enable_torch_compile = combination.get("enable_torch_compile", False)
+        if not enable_torch_compile:
+            torch_compile_max_bs = combination.get("torch_compile_max_bs", 16)
+            # Allow only default value when torch_compile is disabled to reduce search space
+            if torch_compile_max_bs != 16:
+                return False
+        
+        # Rule 6: Skip radix_eviction_policy variations when radix cache is disabled
+        disable_radix = combination.get("disable_radix_cache", False)
+        if disable_radix:
+            radix_policy = combination.get("radix_eviction_policy", "lru")
+            # Allow only default value when radix cache is disabled to reduce search space
+            if radix_policy != "lru":
+                return False
+        
+        # Rule 7: enable_hierarchical_cache and disable_radix_cache are incompatible
+        if enable_hicache and disable_radix:
+            return False
+        
+        # Rule 8: enable_hierarchical_cache and enable_lmcache are mutually exclusive
+        enable_lmcache = combination.get("enable_lmcache", False)
+        if enable_hicache and enable_lmcache:
+            return False
+        
+        # Rule 9: hicache_mem_layout "page_first_direct" requires hicache_io_backend "direct"
+        hicache_mem_layout = combination.get("hicache_mem_layout")
+        hicache_io_backend = combination.get("hicache_io_backend")
+        if hicache_mem_layout == "page_first_direct" and hicache_io_backend != "direct":
+            return False
+        
+        # Rule 10: Reasonable CUDA graph batch size constraints
+        cuda_graph_max_bs = combination.get("cuda_graph_max_bs")
+        if cuda_graph_max_bs is not None and chunked_prefill is not None:
+            # Avoid extremely large cuda_graph_max_bs with small chunked_prefill_size
+            # as it would waste memory
+            if chunked_prefill <= 2048 and cuda_graph_max_bs > 32:
                 return False
         
         return True

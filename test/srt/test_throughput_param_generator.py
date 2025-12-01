@@ -82,9 +82,35 @@ class TestThroughputParamGenerator(unittest.TestCase):
             "page_size",
             "swa_full_tokens_ratio",
             "radix_eviction_policy",
+            "attention_backend",
+            "decode_attention_backend",
+            "prefill_attention_backend",
+            "sampling_backend",
+            "mm_attention_backend",
+            "nsa_prefill_backend",
+            "nsa_decode_backend",
+            "enable_hierarchical_cache",
+            "hicache_ratio",
+            "hicache_size",
+            "hicache_write_policy",
+            "hicache_io_backend",
+            "hicache_mem_layout",
+            "hicache_storage_backend",
+            "hicache_storage_prefetch_policy",
+            "enable_lmcache",
+            "disable_radix_cache",
+            "cuda_graph_max_bs",
+            "disable_overlap_schedule",
+            "enable_mixed_chunk",
+            "enable_two_batch_overlap",
+            "enable_single_batch_overlap",
+            "enable_torch_compile",
+            "enable_piecewise_cuda_graph",
+            "torch_compile_max_bs",
+            "num_continuous_decode_steps",
         ]
         for expected in expected_params:
-            self.assertIn(expected, param_names)
+            self.assertIn(expected, param_names, f"Parameter {expected} not found")
 
     def test_generate_combinations_basic(self):
         """Test basic combination generation."""
@@ -294,6 +320,77 @@ class TestThroughputParamGenerator(unittest.TestCase):
                 self.generator._is_valid_combination(combo),
                 f"Generated invalid combination: {combo}"
             )
+
+    def test_hierarchical_cache_conflicts(self):
+        """Test hierarchical cache conflict rules."""
+        # enable_hierarchical_cache and enable_lmcache are mutually exclusive
+        invalid_combo = {
+            "enable_hierarchical_cache": True,
+            "enable_lmcache": True,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        
+        # enable_hierarchical_cache and disable_radix_cache conflict
+        invalid_combo = {
+            "enable_hierarchical_cache": True,
+            "disable_radix_cache": True,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+    
+    def test_overlap_schedule_conflicts(self):
+        """Test overlap scheduling conflict rules."""
+        # disable_overlap_schedule conflicts with enable_two_batch_overlap
+        invalid_combo = {
+            "disable_overlap_schedule": True,
+            "enable_two_batch_overlap": True,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        
+        # disable_overlap_schedule conflicts with enable_single_batch_overlap
+        invalid_combo = {
+            "disable_overlap_schedule": True,
+            "enable_single_batch_overlap": True,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+    
+    def test_hicache_mem_layout_conflicts(self):
+        """Test hicache memory layout conflicts."""
+        # page_first_direct requires direct io backend
+        invalid_combo = {
+            "hicache_mem_layout": "page_first_direct",
+            "hicache_io_backend": "kernel",
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        
+        # Valid combination
+        valid_combo = {
+            "hicache_mem_layout": "page_first_direct",
+            "hicache_io_backend": "direct",
+        }
+        self.assertTrue(self.generator._is_valid_combination(valid_combo))
+    
+    def test_cuda_graph_size_constraints(self):
+        """Test CUDA graph batch size constraints."""
+        # Large cuda_graph_max_bs with small chunked_prefill_size is invalid
+        invalid_combo = {
+            "chunked_prefill_size": 1024,
+            "cuda_graph_max_bs": 96,
+            "max_prefill_tokens": 8192,
+        }
+        self.assertFalse(self.generator._is_valid_combination(invalid_combo))
+        
+        # Reasonable combination
+        valid_combo = {
+            "chunked_prefill_size": 8192,
+            "cuda_graph_max_bs": 64,
+            "max_prefill_tokens": 16384,
+        }
+        self.assertTrue(self.generator._is_valid_combination(valid_combo))
+    
+    def test_parameter_count(self):
+        """Test that all 33 required parameters are present."""
+        self.assertEqual(len(self.generator.parameters), 33,
+                        f"Expected 33 parameters, got {len(self.generator.parameters)}")
 
 
 if __name__ == "__main__":
