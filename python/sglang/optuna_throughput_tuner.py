@@ -8,7 +8,8 @@ for SGLang throughput parameters. It optimizes two objectives:
 2. Maximize TPS (Tokens Per Second)
 
 The parameters are based on the top 18 most impactful throughput optimization 
-parameters defined in top15_throughput_param_generator.py.
+parameters defined in top15_throughput_param_generator.py (note: despite the 
+filename "top15", it actually defines 18 parameters).
 
 Usage:
     python -m sglang.optuna_throughput_tuner --n-trials 100 --device-num 8
